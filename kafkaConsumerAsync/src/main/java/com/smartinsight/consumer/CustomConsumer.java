@@ -12,7 +12,6 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 
 import javax.annotation.PostConstruct;
-import javax.annotation.Resource;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -31,7 +30,6 @@ public class CustomConsumer {
 
     @KafkaListener(topics = {"test"}, groupId = "test-group")
     public void listener(List<ConsumerRecord<String, String>> records, Consumer<String, String> consumer) throws InterruptedException {
-        System.out.println(records.toString());
         // 分派任务
         for (ConsumerRecord<String, String> record : records) {
             String partition = String.valueOf(record.partition());
