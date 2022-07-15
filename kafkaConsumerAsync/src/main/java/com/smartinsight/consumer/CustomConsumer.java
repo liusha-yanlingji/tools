@@ -8,8 +8,11 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 
+import javax.annotation.PostConstruct;
+import javax.annotation.Resource;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -20,27 +23,33 @@ import java.util.concurrent.BlockingQueue;
 public class CustomConsumer {
     public static Map<String, ProcessingWindow> offsetMap = new HashMap<>();// key是分区
 
-    @KafkaListener(topics = {"test"}, groupId = "user")
-    public void listen(List<ConsumerRecord<String, String>> records, Consumer<String, String> consumer) throws InterruptedException {
+    @PostConstruct
+    @Async
+    public void listenerAsync() {
+        // springboot启动时异步执行kafka监听程序
+    }
+
+    @KafkaListener(topics = {"test"}, groupId = "test-group")
+    public void listener(List<ConsumerRecord<String, String>> records, Consumer<String, String> consumer) throws InterruptedException {
+        System.out.println(records.toString());
         // 分派任务
         for (ConsumerRecord<String, String> record : records) {
             String partition = String.valueOf(record.partition());
             ProcessingWindow processingWindow = offsetMap.get(partition);
             if (processingWindow == null) {
                 // 初始化一个滑动窗口
-                ProcessingWindow window = ProcessingWindow.init(record.topic(), record.partition(), record.offset(), consumer);
-                offsetMap.put(partition, window);
+                processingWindow = ProcessingWindow.init(record.topic(), record.partition(), record.offset(), consumer);
+                offsetMap.put(partition, processingWindow);
                 // 初始化10个线程
                 for (int i = 0; i < 10; i++) {
-                    WorkerThread WorkerThread = new WorkerThread(window.getQueue(), window);
+                    WorkerThread WorkerThread = new WorkerThread(processingWindow.getQueue(), processingWindow);
                     WorkerThread.start();
                 }
-            } else {
-                // 分配任务
-                BlockingQueue<ConsumerRecord<String, String>> queue = processingWindow.getQueue();
-                // 任务已满 阻塞拉取线程
-                queue.put(record);
             }
+            // 分配任务
+            BlockingQueue<ConsumerRecord<String, String>> queue = processingWindow.getQueue();
+            // 任务已满 阻塞拉取线程
+            queue.put(record);
         }
         // 提交偏移量
         for (ProcessingWindow window : offsetMap.values()) {
@@ -54,6 +63,7 @@ public class CustomConsumer {
             TopicPartition tp = new TopicPartition(window.getTopic(), window.getPartition());
             OffsetAndMetadata offset = new OffsetAndMetadata(lastCommitOffset);
             curOffset.put(tp, offset);
+            log.debug("拉取线程提交偏移量：" + lastCommitOffset);
             consumer.commitSync(curOffset);
             // 记录一下
             window.setLasttimeOffset(lastCommitOffset);

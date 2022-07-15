@@ -1,6 +1,7 @@
 package com.smartinsight.worker;
 
 import lombok.Data;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 
@@ -11,6 +12,7 @@ import java.util.concurrent.BlockingQueue;
  * 已完成的任务的滑动窗口
  */
 @Data
+@Slf4j
 public class ProcessingWindow {
     // 主题
     private String topic;
@@ -29,15 +31,17 @@ public class ProcessingWindow {
     private long[] offsets;// 偏移量数组 用来暂存已消费完成的kafka消息的偏移量
     private long lastCommitOffset;// 最后一次提交的偏移量
 
-    public static ProcessingWindow init(String topic, int partition, long offset,Consumer<String, String> consumer) {
+    public static ProcessingWindow init(String topic, int partition, long offset, Consumer<String, String> consumer) {
         ProcessingWindow pw = new ProcessingWindow();
         pw.setTopic(topic);
         pw.setPartition(partition);
         pw.setConsumer(consumer);
         pw.setLastCommitOffset(offset);
-        pw.setSize(200);
-        pw.setOffsets(new long[200]);
+        pw.setLasttimeOffset(offset);
+        pw.setSize(10);
+        pw.setOffsets(new long[10]);
         pw.setQueue(new ArrayBlockingQueue<>(200));
+        log.debug("初始化一个窗口" + pw.toString());
         return pw;
     }
 
@@ -49,7 +53,7 @@ public class ProcessingWindow {
             return;
         }
         // 本偏移量在数组中的下标
-        int index = (int) (offset % size - 1);
+        int index = (int) (offset % size);
         if (offset != lastCommitOffset) {
             offsets[index] = offset;
         } else {
@@ -58,9 +62,10 @@ public class ProcessingWindow {
                 lastCommitOffset = offset + 1;
                 // 取数组中的下一个数字
                 offset = next(index);
-                index = (int) (offset % size - 1);
+                index = (int) (offset % size);
             }
         }
+        log.debug(Thread.currentThread().getName() + "lastCommitOffset--" + lastCommitOffset);
     }
 
     /**
