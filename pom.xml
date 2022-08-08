@@ -13,6 +13,7 @@
         <module>multiple-datasource</module>
         <module>sync-imagecategory</module>
         <module>kafkaConsumerAsync</module>
+        <module>stock</module>
     </modules>
 
     <name>tools</name>
